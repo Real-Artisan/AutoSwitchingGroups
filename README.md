@@ -1,5 +1,5 @@
 ### AutoSwitchingGroups
-A tool created using Python 3 for stopping or resuming scaling processes an autoscaling group. 
+A tool created using Python 3 for stopping or resuming scaling processes in an autoscaling group. 
 
 ### How to use
 Ensure That the minimum capacity of the auto scaling group is set to 0.
