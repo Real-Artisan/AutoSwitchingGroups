@@ -11,6 +11,7 @@ def stop_auto_scaling_group(auto_scaling_group_name):
     # Terminate instances
     ec2_client.terminate_instances(InstanceIds=instance_ids)
 
+
     # Set desired capacity to 0 to stop all instances
     autoscaling_client.update_auto_scaling_group(
         AutoScalingGroupName=auto_scaling_group_name,
@@ -22,7 +23,7 @@ def stop_auto_scaling_group(auto_scaling_group_name):
     # Suspend scaling processes to prevent automatic instance launches
     autoscaling_client.suspend_processes(AutoScalingGroupName=auto_scaling_group_name)
 
-    print("All instances in Auto Scaling group '{auto_scaling_group_name}' stopped and scaling processes suspended.")
+    print("All instances in Auto Scaling group " + auto_scaling_group_name + " stopped and scaling processes suspended.")
 
 def resume_auto_scaling_group(auto_scaling_group_name):
     autoscaling_client = boto3.client('autoscaling')
@@ -38,7 +39,7 @@ def resume_auto_scaling_group(auto_scaling_group_name):
     # Resume scaling processes to allow automatic instance launches
     autoscaling_client.resume_processes(AutoScalingGroupName=auto_scaling_group_name)
 
-    print("Scaling processes for Auto Scaling group '{auto_scaling_group_name}' resumed.")
+    print("Scaling processes for Auto Scaling group " + auto_scaling_group_name + " resumed.")
 
 # Interactive CLI
 def interactive_cli():
