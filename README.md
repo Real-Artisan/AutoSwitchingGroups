@@ -19,4 +19,4 @@ Enter 'stop' to stop all instances, 'resume' to resume scaling processes, or 'q'
 
 
 ### Developer
-This tool was created by Daniel Pereowei Iwenya. <a href="mailto:iwenyadaniel@icloud.com">Contact Developer.</a>
+This tool was created by Daniel Pereowei Iwenya. <a href="mailto:iwenyadaniel12@gmail.com">Contact Developer.</a>
