@@ -1,70 +1,136 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/external"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
-func main() {
-	minSize := flag.Int64("min", 1, "Minimum desired capacity for Autoscaling groups")
-	maxSize := flag.Int64("max", 1, "Maximum desired capacity for Autoscaling groups")
-	desiredCap := flag.Int64("desired", 1, "Desired capacity for Autoscaling groups")
-
-	flag.Parse()
-
-	sess := session.Must(session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{
-			Region: aws.String("us-east-2"),
-		},
-	}))
-
-	var err error
-
-	asg := autoscaling.New(sess)
-
-	instances := &autoscaling.DescribeAutoScalingGroupsInput{
-		MaxRecords: aws.Int64(100),
-	}
-
-	fmt.Println(instances)
-
-	result, err := asg.DescribeAutoScalingGroups(instances)
+func stopAutoScalingGroup(autoScalingGroupName string) {
+	cfg, err := external.LoadDefaultAWSConfig()
 	if err != nil {
-		panic(err)
+		fmt.Println("Error loading AWS config:", err)
+		return
 	}
 
-	for _, group := range result.AutoScalingGroups {
-		for _, tag := range group.Tags {
-			if *tag.Key == "Name" && strings.HasPrefix(*tag.Value, "Dev") {
-				fmt.Println(*group.AutoScalingGroupName)
-				fmt.Printf("Updating autoscaling group %s\n", *group.AutoScalingGroupName)
+	ec2Svc := ec2.New(cfg)
+	autoscalingSvc := autoscaling.New(cfg)
 
-				// Your custom function to set desired capacity, min size, and max size
-				updateAutoScalingGroupCapacity(asg, group.AutoScalingGroupName, *minSize, *maxSize, *desiredCap)
+	// Get instance IDs from the Auto Scaling group
+	asgInput := &autoscaling.DescribeAutoScalingGroupsInput{
+		AutoScalingGroupNames: []string{autoScalingGroupName},
+	}
+	asgOutput, err := autoscalingSvc.DescribeAutoScalingGroups(asgInput)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 
-				break // no need to check remaining tags for this group
-			}
+	var instanceIDs []string
+	for _, instance := range asgOutput.AutoScalingGroups[0].Instances {
+		instanceIDs = append(instanceIDs, aws.ToString(instance.InstanceId))
+	}
+
+	// Terminate instances
+	terminateInput := &ec2.TerminateInstancesInput{
+		InstanceIds: instanceIDs,
+	}
+	_, err = ec2Svc.TerminateInstancesRequest(terminateInput).Send()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	// Set desired capacity to 0 to stop all instances
+	updateInput := &autoscaling.UpdateAutoScalingGroupInput{
+		AutoScalingGroupName: aws.String(autoScalingGroupName),
+		DesiredCapacity:      aws.Int64(0),
+		MaxSize:              aws.Int64(0),
+		MinSize:              aws.Int64(0),
+	}
+	_, err = autoscalingSvc.UpdateAutoScalingGroupRequest(updateInput).Send()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	// Suspend scaling processes to prevent automatic instance launches
+	suspendInput := &autoscaling.SuspendProcessesInput{
+		AutoScalingGroupName: aws.String(autoScalingGroupName),
+	}
+	_, err = autoscalingSvc.SuspendProcessesRequest(suspendInput).Send()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	fmt.Println("All instances in Auto Scaling group", autoScalingGroupName, "stopped and scaling processes suspended.")
+}
+
+func resumeAutoScalingGroup(autoScalingGroupName string) {
+	cfg, err := external.LoadDefaultAWSConfig()
+	if err != nil {
+		fmt.Println("Error loading AWS config:", err)
+		return
+	}
+
+	autoscalingSvc := autoscaling.New(cfg)
+
+	// Set max size to the total number of instances to allow instance launches
+	updateInput := &autoscaling.UpdateAutoScalingGroupInput{
+		AutoScalingGroupName: aws.String(autoScalingGroupName),
+		DesiredCapacity:      aws.Int64(1),
+		MaxSize:              aws.Int64(1),
+		MinSize:              aws.Int64(1),
+	}
+	_, err = autoscalingSvc.UpdateAutoScalingGroupRequest(updateInput).Send()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	// Resume scaling processes to allow automatic instance launches
+	resumeInput := &autoscaling.ResumeProcessesInput{
+		AutoScalingGroupName: aws.String(autoScalingGroupName),
+	}
+	_, err = autoscalingSvc.ResumeProcessesRequest(resumeInput).Send()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	fmt.Println("Scaling processes for Auto Scaling group", autoScalingGroupName, "resumed.")
+}
+
+
+func interactiveCLI() {
+	var action string
+	for {
+		fmt.Print("Enter 'stop' to stop all instances, 'resume' to resume scaling processes, or 'q' to quit: ")
+		fmt.Scanln(&action)
+
+		if action == "stop" {
+			var autoScalingGroupName string
+			fmt.Print("Enter the Auto Scaling group name: ")
+			fmt.Scanln(&autoScalingGroupName)
+			stopAutoScalingGroup(autoScalingGroupName)
+		} else if action == "resume" {
+			var autoScalingGroupName string
+			fmt.Print("Enter the Auto Scaling group name: ")
+			fmt.Scanln(&autoScalingGroupName)
+			resumeAutoScalingGroup(autoScalingGroupName)
+		} else if action == "q" {
+			fmt.Println("Exiting the program...")
+			break
+		} else {
+			fmt.Println("Invalid input. Please try again.")
 		}
 	}
 }
 
-// Custom function to update Auto Scaling group capacity
-func updateAutoScalingGroupCapacity(asg *autoscaling.AutoScaling, autoScalingGroupName *string, minSize, maxSize, desiredCap int64) {
-	_, err := asg.UpdateAutoScalingGroup(&autoscaling.UpdateAutoScalingGroupInput{
-		AutoScalingGroupName: autoScalingGroupName,
-		MinSize:              aws.Int64(minSize),
-		MaxSize:              aws.Int64(maxSize),
-		DesiredCapacity:      aws.Int64(desiredCap),
-	})
-
-	if err != nil {
-		fmt.Printf("Failed to update autoscaling group %s: %v\n", *autoScalingGroupName, err)
-	} else {
-		fmt.Printf("Successfully updated autoscaling group %s\n", *autoScalingGroupName)
-	}
+func main() {
+	interactiveCLI()
 }
