@@ -1,58 +1,77 @@
 import boto3
 
-def stop_auto_scaling_group(auto_scaling_group_name):
-    ec2_client = boto3.client('ec2')
-    autoscaling_client = boto3.client('autoscaling')
+def stop_auto_scaling_groups(region):
+    ec2_client = boto3.client('ec2', region_name=region)
+    autoscaling_client = boto3.client('autoscaling', region_name=region)
 
-    # Get instance IDs from the Auto Scaling group
-    response = autoscaling_client.describe_auto_scaling_groups(AutoScalingGroupNames=[auto_scaling_group_name])
-    instance_ids = [instance['InstanceId'] for instance in response['AutoScalingGroups'][0]['Instances']]
+    # Get all Auto Scaling groups in the specified region
+    response = autoscaling_client.describe_auto_scaling_groups()
+    auto_scaling_groups = response['AutoScalingGroups']
 
-    # Terminate instances
-    ec2_client.terminate_instances(InstanceIds=instance_ids)
+    if not auto_scaling_groups:
+        print("No Auto Scaling groups found in the specified region.")
+        return
 
+    for group in auto_scaling_groups:
+        group_name = group['AutoScalingGroupName']
+        
+        # Get instance IDs from the Auto Scaling group
+        instance_ids = [instance['InstanceId'] for instance in group['Instances']]
 
-    # Set desired capacity to 0 to stop all instances
-    autoscaling_client.update_auto_scaling_group(
-        AutoScalingGroupName=auto_scaling_group_name,
-        DesiredCapacity=0,
-        MaxSize=0,
-        MinSize=0,
-    )
+        # Terminate instances
+        ec2_client.terminate_instances(InstanceIds=instance_ids)
 
-    # Suspend scaling processes to prevent automatic instance launches
-    autoscaling_client.suspend_processes(AutoScalingGroupName=auto_scaling_group_name)
+        # Set desired capacity to 0 to stop all instances
+        autoscaling_client.update_auto_scaling_group(
+            AutoScalingGroupName=group_name,
+            DesiredCapacity=0,
+            MaxSize=0,
+            MinSize=0,
+        )
 
-    print("All instances in Auto Scaling group " + auto_scaling_group_name + " stopped and scaling processes suspended.")
+        # Suspend scaling processes to prevent automatic instance launches
+        autoscaling_client.suspend_processes(AutoScalingGroupName=group_name)
 
-def resume_auto_scaling_group(auto_scaling_group_name):
-    autoscaling_client = boto3.client('autoscaling')
+        print(f"All instances in Auto Scaling group {group_name} stopped and scaling processes suspended.")
 
-    # Set max size to the total number of instances to allow instance launches
-    autoscaling_client.update_auto_scaling_group(
-        AutoScalingGroupName=auto_scaling_group_name,
-        DesiredCapacity=1,
-        MaxSize=1,
-        MinSize=1,
-    )
+def resume_auto_scaling_groups(region):
+    autoscaling_client = boto3.client('autoscaling', region_name=region)
 
-    # Resume scaling processes to allow automatic instance launches
-    autoscaling_client.resume_processes(AutoScalingGroupName=auto_scaling_group_name)
+    # Get all Auto Scaling groups in the specified region
+    response = autoscaling_client.describe_auto_scaling_groups()
+    auto_scaling_groups = response['AutoScalingGroups']
 
-    print("Scaling processes for Auto Scaling group " + auto_scaling_group_name + " resumed.")
+    if not auto_scaling_groups:
+        print("No Auto Scaling groups found in the specified region.")
+        return
+
+    for group in auto_scaling_groups:
+        group_name = group['AutoScalingGroupName']
+
+        # Set max size to the total number of instances to allow instance launches
+        autoscaling_client.update_auto_scaling_group(
+            AutoScalingGroupName=group_name,
+            DesiredCapacity=1,
+            MaxSize=1,
+            MinSize=1,
+        )
+
+        # Resume scaling processes to allow automatic instance launches
+        autoscaling_client.resume_processes(AutoScalingGroupName=group_name)
+
+        print(f"Scaling processes for Auto Scaling group {group_name} resumed.")
 
 # Interactive CLI
 def interactive_cli():
+    region = input("Enter the AWS region: ")
 
     while True:
         action = input("Enter 'stop' to stop all instances, 'resume' to resume scaling processes, or 'q' to quit: ")
 
         if action == 'stop':
-            auto_scaling_group_name = input("Enter the Auto Scaling group name: ")
-            stop_auto_scaling_group(auto_scaling_group_name)
+            stop_auto_scaling_groups(region)
         elif action == 'resume':
-            auto_scaling_group_name = input("Enter the Auto Scaling group name: ")
-            resume_auto_scaling_group(auto_scaling_group_name)
+            resume_auto_scaling_groups(region)
         elif action == 'q':
             print("Exiting the program...")
             break
