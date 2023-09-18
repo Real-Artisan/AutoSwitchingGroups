@@ -1,5 +1,7 @@
 ### AutoSwitchingGroups
-A tool created using Python 3 for stopping or resuming scaling processes in an autoscaling group. 
+A tool created using Python 3 for stopping or resuming scaling processes in an autoscaling group.
+
+I made a few modifications to this tool, now it asks for your desired region and then fetches and executes the stop or resume on all the autoscaling groups in that region, cheers!!
 
 ### How to use
 Ensure That the minimum capacity of the auto scaling group is set to 0.
