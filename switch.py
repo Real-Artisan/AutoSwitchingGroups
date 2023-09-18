@@ -17,11 +17,8 @@ def stop_auto_scaling_groups(region):
         
         # Get instance IDs from the Auto Scaling group
         instance_ids = [instance['InstanceId'] for instance in group['Instances']]
-
-        # Terminate instances
         ec2_client.terminate_instances(InstanceIds=instance_ids)
 
-        # Set desired capacity to 0 to stop all instances
         autoscaling_client.update_auto_scaling_group(
             AutoScalingGroupName=group_name,
             DesiredCapacity=0,
@@ -48,7 +45,6 @@ def resume_auto_scaling_groups(region):
     for group in auto_scaling_groups:
         group_name = group['AutoScalingGroupName']
 
-        # Set max size to the total number of instances to allow instance launches
         autoscaling_client.update_auto_scaling_group(
             AutoScalingGroupName=group_name,
             DesiredCapacity=1,
@@ -56,7 +52,7 @@ def resume_auto_scaling_groups(region):
             MinSize=1,
         )
 
-        # Resume scaling processes to allow automatic instance launches
+        # Resume scaling processes
         autoscaling_client.resume_processes(AutoScalingGroupName=group_name)
 
         print(f"Scaling processes for Auto Scaling group {group_name} resumed.")
@@ -78,5 +74,5 @@ def interactive_cli():
         else:
             print("Invalid input. Please try again.")
 
-# Run the interactive CLI
+# Run
 interactive_cli()
